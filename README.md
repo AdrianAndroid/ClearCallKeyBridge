@@ -19,6 +19,7 @@
 | root 级 `log stream`（bluetoothd/bluetoothaudiod/coreaudiod） | **0 条 AVRCP 报文** |
 | IOBluetooth L2CAP PSM 23（AVRCP 控制通道） | 通道存在（UUID 110F），但打开返回 `-536870212`（被系统独占） |
 | HFP RFCOMM（通道 12） | 系统占用，读取 0 字节 |
+| **同类设备对照：V98 遥控器** | **Play/Pause + 绝对音量数值全部可读，三键可用（见 §12）** |
 
 结论：该耳机按键走 **AVRCP 绝对音量**，由系统 `bluetoothd` / `mediaremoted` 内部消费；
 macOS 13+ 已删除可注入的 `AVRCPAgent` 进程，第三方无法在用户态拦截。

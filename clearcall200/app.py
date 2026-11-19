@@ -445,13 +445,65 @@ class App:
         """
         if not self.v98_watcher:
             return
+        import time as _t
+
         for ev in self.v98_watcher.drain():
+            now = _t.monotonic()
             if ev[0] == "play":
                 self.ui.append("DETECT v98 play (AVRCP Play)")
+                if now - getattr(self, "_v98_play_ts", 0.0) >= 0.15:
+                    self._v98_play_ts = now
+                    self._handle_trigger("call:click", "v98")
             elif ev[0] == "pause":
                 self.ui.append("DETECT v98 pause (AVRCP Pause)")
+                # 播放/暂停是同一个物理键：与 Play 共用去重时间戳，映射到同一张卡
+                if now - getattr(self, "_v98_play_ts", 0.0) >= 0.15:
+                    self._v98_play_ts = now
+                    self._handle_trigger("call:click", "v98")
             elif ev[0] == "volume":
-                self.ui.append(f"DETECT v98 volume={ev[1]} (~{ev[2]}%)")
+                key = self._v98_volume_dir(ev[2], now)
+                self.ui.append(f"DETECT v98 volume={ev[1]} (~{ev[2]}%) -> {key}")
+                if key:
+                    self._handle_trigger(f"{key}:click", "v98")
+
+    def _v98_volume_dir(self, pct: int, now: float) -> str | None:
+        """绝对音量百分比 → volp / volm（方向判定，含边界重发处理）。
+
+        规则见 openspec/changes/2026-11-19-v98-triggers.md：
+        - 首次通知只记基线，不出方向；
+        - 上升 ≥1 → volp；下降 ≥1 → volm；
+        - 同值重复：距上次触发 ≥0.25s 时沿用上一次方向，否则丢弃。
+        """
+        last_pct = getattr(self, "_v98_vol_pct", None)
+        last_dir = getattr(self, "_v98_vol_dir", None)
+        last_ts = getattr(self, "_v98_vol_ts", 0.0)
+
+        if last_pct is None:
+            self._v98_vol_pct = pct
+            return None
+
+        if pct > last_pct:
+            key = "volp"
+        elif pct < last_pct:
+            key = "volm"
+        else:
+            # 同值：只有边界才有意义——100% 只可能是"加到顶"，0% 只可能是"减到底"
+            if pct == 100 and now - last_ts >= 0.25:
+                key = "volp"
+            elif pct == 0 and now - last_ts >= 0.25:
+                key = "volm"
+            else:
+                # 中间值重复：视为抖动/重发，丢弃
+                return None
+            self._v98_vol_ts = now
+            self._v98_vol_pct = pct
+            self._v98_vol_dir = key
+            return key
+
+        self._v98_vol_pct = pct
+        self._v98_vol_dir = key
+        self._v98_vol_ts = now
+        return key
 
     def pump_volume(self) -> None:
         """轮询音量变化 → 识别为 volp/volm 按键（必须在主线程调用）。"""
