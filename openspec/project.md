@@ -33,8 +33,8 @@ OpenSpec = 模型契约文档（openspec/ 目录），不是服务、不是分�
 
 ## 目标平台
 
-- MVP：Linux（BlueZ + btmon），终端程序。
-- 后续：macOS（IOBluetooth / HCI 抓包解析），复用同一套模型与界面。
+- MVP：macOS，单进程本地程序。
+- 真实蓝牙按键监听的可用接口和设备支持范围须经证据验证；Linux 不属于当前 MVP 交付要求。
 
 ## 领域术语
 

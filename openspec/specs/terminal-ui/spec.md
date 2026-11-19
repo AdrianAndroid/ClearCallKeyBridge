@@ -142,7 +142,7 @@ learn 模式 SHALL 在状态栏下增加一行固定提示。
 
 #### Scenario: doctor
 - **WHEN** 用户输入 `doctor`
-- **THEN** 逐项输出 ✅/❌ 与修复建议，覆盖：蓝牙适配器与权限、目标设备在线状态、HFP 是否被系统占用、`/dev/uinput` 权限、虚拟麦设备存在性、OBS WebSocket 连通性、忙灯是否可控、单实例锁状态
+- **THEN** 逐项输出 ✅/❌ 与修复建议，覆盖：蓝牙适配器与权限、目标设备在线状态、HFP 是否被系统占用、macOS 辅助功能、输入监控及键盘事件发送权限、虚拟麦设备存在性、OBS WebSocket 连通性、忙灯是否可控、单实例锁状态
 
 #### Scenario: debug
 - **WHEN** 用户输入 `debug on` / `debug off`

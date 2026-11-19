@@ -91,15 +91,15 @@ volp:click    volp:long     volm:click
 
 ### Requirement: 平台实现
 
-MVP SHALL 在 Linux 上基于 BlueZ / btmon 实现；非 Linux 平台的实现不得改变本规范的对外行为。
+MVP SHALL 以 macOS 为目标平台。采集方式 SHALL 基于 macOS 可用接口和实际证据选择，不预设系统必然暴露 AVRCP / HFP 原始事件。
 
-#### Scenario: Linux 采集
-- **WHEN** 程序运行在 Linux 且 BlueZ 可用
-- **THEN** 通过 BlueZ D-Bus（MediaControl1 / HFP）与 btmon HCI 解析获取事件；采集在独立线程/协程中运行，不阻塞界面刷新
+#### Scenario: macOS 采集
+- **WHEN** 目标设备连接且所需接口与权限可用
+- **THEN** 在独立线程或协程中采集可获得的设备事件，不阻塞界面；仅对证据足够的事件生成 trigger
 
-#### Scenario: 依赖缺失
-- **WHEN** 运行环境缺少 BlueZ 或权限不足
-- **THEN** 程序启动仍成功，界面标注「蓝牙不可用」，`test` 命令与界面调试仍可正常使用
+#### Scenario: 接口或权限不可用
+- **WHEN** macOS 不提供所需事件、依赖缺失或权限不足
+- **THEN** 明确提示限制，程序仍可运行，`test` 与界面调试仍可使用；不得伪造事件
 
 ### Requirement: 手势判定与时延
 
@@ -149,20 +149,14 @@ MVP SHALL 在 Linux 上基于 BlueZ / btmon 实现；非 Linux 平台的实现�
 - **WHEN** 执行 `debug on` 后收到任何报文
 - **THEN** 输出原始报文摘要（方向、CID、opcode 或 AT 文本）到事件流
 
-### Requirement: 音量观测通道（macOS 实测口径）
+### Requirement: macOS 音量观测的证据边界
 
-本机实测结论：ClearCall 200 的音量 +/− 为蓝牙 AVRCP 绝对音量，由系统直接写入输出音量，**不产生 NX_SYSDEFINED 事件**；CGEventTap（HID/Session 双 tap）抓不到，耳机在 macOS 侧也无任何 IOHIDDevice 节点；HFP 串口 `/dev/cu.*` 可打开但读不到数据。因此音量键必须走"观测音量变化"通道，而不是事件拦截。
+系统输出音量变化 MAY 用于诊断，但不能单独证明变化来自目标耳机或对应某个物理按键。只有能够可靠归因到目标设备和手势时，采集层才可生成对应 trigger；不得由音量变化伪造按下或释放边沿。
 
-#### Scenario: 音量键被拨动
-- **WHEN** 默认输出设备音量相对上次基线的变化量 ≥ `step`（默认 0.02）
-- **THEN** 按变化方向产出 `volp:click` 或 `volm:click`
-- **AND** 若 `capture.intercept=true`，立即写回基线音量（等效拦截），并在 `cooldown`（0.25s）内忽略后续写入
-- **AND** 单次拨动若伴随连续写入（滑行），在 `debounce`（0.6s）内合并为一次按键
+#### Scenario: 音量变化来源不明
+- **WHEN** 系统音量变化但无法确认来源
+- **THEN** 不将其作为真实耳机按键事件；可在诊断中显示该变化
 
-#### Scenario: 音量键长按
-- **WHEN** 用户长按耳机音量键
-- **THEN** 不产出 `volp:long`（AVRCP 绝对音量没有可识别的按住边沿），长按手势仅对键盘媒体键与通话键可用
-
-#### Scenario: 通话键与静音键
-- **WHEN** 处于非通话状态且用户按下通话键
-- **THEN** 系统侧无任何事件、无声音行为，本程序不产出 `call:*` 事件（这颗键只在 HFP 通话中由系统处理接听/挂断）
+#### Scenario: 没有释放边沿
+- **WHEN** 可观察到的信号不包含可靠的释放边沿
+- **THEN** 不把该信号用于依赖按下和释放的 `ptt_hold`

@@ -13,8 +13,8 @@
 
 ## 2. 目标平台
 
-- 首选 **Linux（BlueZ / btmon）**，开发调试环境。
-- 预留 macOS 适配入口（IOBluetooth / 抓包解析），但 MVP 不实现。
+- MVP 目标平台为 **macOS**；Linux 不属于当前交付要求。
+- 使用 macOS 可用的蓝牙和系统接口研究真实按键采集，具体能力须以证据验证。
 - 蓝牙采集、UI 渲染、定时器必须解耦，UI 不能阻塞采集循环。
 
 ## 3. 触发源（固定 7 条事件，来自 4 个物理按键）
@@ -59,7 +59,7 @@ notify"文本"        系统桌面通知
 - 规则持久化到本地配置文件（JSON），启动自动加载，不存在则写入默认示例规则。
 
 ### 关于"拦截"的现实（P0-3 决策 A：并存）
-AVRCP 音量/媒体键由 BlueZ + 音频服务直接消费，**程序能看到事件但无法阻止系统默认行为**。
+AVRCP 音量/媒体键可能由 macOS 蓝牙栈和音频服务消费；是否能观察到具体事件须实测，默认行为按并存处理。
 因此自定义动作与原系统行为同时发生。界面与文档必须如实说明，**不得宣称"已拦截"**；
 推荐把自定义优先绑到 `volp:long` / `volm:click` / `call:long`。
 
@@ -109,7 +109,7 @@ test TRIG     手动模拟触发（如 test trigger=volp:long），用于无蓝�
 save          保存规则到本地配置文件
 reload        重新读取配置文件（dirty 时需确认，不静默覆盖）
 state         立即打印最新通话/静音/模式状态
-doctor        环境自检（蓝牙/权限/uinput/虚拟麦/OBS/忙灯/实例锁）
+doctor        环境自检（蓝牙/系统权限/虚拟麦/OBS/忙灯/实例锁）
 debug on|off  开关原始报文摘要输出（默认 off）
 export feed   导出最近 200 行事件流为文本
 help          命令说明
@@ -119,7 +119,7 @@ quit          退出程序
 ## 9. 代码结构（按模块开发，不要堆在一个文件）
 
 ```
-bluetooth/    BlueZ / btmon 采集，AVRCP + HFP 报文解析
+bluetooth/    macOS 蓝牙采集入口，AVRCP + HFP 报文解析（能力待验证）
 parser/       时序解析：按下/松开 → 单击/长按/双击，防抖；输出 trigger + edge 事件
 rules/        规则表加载、增删改查、持久化
 state/        状态机（含 ptt_mode）+ learn 倒计时

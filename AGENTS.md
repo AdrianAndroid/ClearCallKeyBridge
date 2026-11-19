@@ -8,7 +8,7 @@
 ## 非显然的硬约束（违反即 bug）
 
 - 单体单进程终端程序。`openspec/` 是模型规范文档，**不是运行中的服务**：禁止实现 TCP 中枢 / Agent-Worker 分布式 / Web GUI。
-- 目标平台 Linux（BlueZ + btmon）；macOS 只留适配入口。
+- 目标平台为 macOS；Linux 不属于当前 MVP 交付要求。真实按键监听能力须以证据验证。
 - 采集线程、UI 渲染、定时器必须解耦，UI 不得阻塞采集。
 - `mute:click` 仅在 HFP `call_state != idle` 时存在；空闲时不产出事件，**不得软件伪造**。
 - learn 模式必须完全跳过规则匹配与动作执行，只做检测 + 忙灯反馈（不可控时降级文案），30s 超时回 normal。
@@ -41,5 +41,5 @@ python3 -m unittest tests.test_parser.TestLongPress -v  # 单跑一个类
 
 - 开发节奏与验收：`docs/开发路线.md`
 - 界面原型与布局刷新规则：`docs/界面设计.md`
-- btmon 抓包与 MUTE 逆向方法：`docs/蓝牙调试指南.md`
+- 历史 Linux 抓包与 MUTE 逆向参考：`docs/蓝牙调试指南.md`
 - 已知功能缺口与待定事项：`openspec/changes/2026-11-19-mvp-gaps.md`

@@ -29,15 +29,15 @@
 
 #### Scenario: quit 命令
 - **WHEN** 用户输入 `quit`
-- **THEN** 按顺序执行：停采集 → 停推流（`ptt_state=0`）→ 关闭 `uinput` → 写回终端状态 → 删除锁文件 → 退出；若 `dirty=true` 提示未保存
+- **THEN** 按顺序执行：停采集 → 停推流（`ptt_state=0`）→ 释放键盘事件及相关系统资源 → 写回终端状态 → 删除锁文件 → 退出；若 `dirty=true` 提示未保存
 
 #### Scenario: SIGTERM / SIGINT
 - **WHEN** 进程收到 SIGTERM 或 SIGINT
 - **THEN** 走与 `quit` 相同的清理路径，退出码 0；不得留下挂着的虚拟麦或锁文件
 
-#### Scenario: uinput 释放
-- **WHEN** 程序创建过虚拟 HID 设备
-- **THEN** 退出时必须销毁该设备，避免系统中残留"幽灵键盘"
+#### Scenario: 输入资源释放
+- **WHEN** 程序创建过事件监听或输入相关资源
+- **THEN** 退出时必须释放这些资源，避免残留监听或按键状态
 
 ### Requirement: 配置外部变更
 
@@ -60,15 +60,15 @@
 - **THEN** 至少覆盖以下检查项，逐项输出 ✅/❌ + 建议：
 
 ```
-[1] bluetooth service           systemctl status bluetooth
-[2] adapter present             hciconfig -a
-[3] target device online        按 MAC 匹配 bluetoothctl info
-[4] hfp/avrcp reachable         D-Bus MediaControl1 / HFP 节点
-[5] /dev/uinput writable        权限与 udev 规则
-[6] virtual mic device           PulseAudio/PipeWire 输入设备
-[7] obs websocket               ws://host:port 可连
-[8] busylight capable           能力探测结果（未知 / 支持 / 不支持）
-[9] single instance lock        锁文件状态
+[1] macOS bluetooth            蓝牙服务与适配器状态
+[2] target device              目标设备连接状态
+[3] input observation          可用采集通道及权限
+[4] accessibility/input       辅助功能与输入监控权限（按所用接口）
+[5] keyboard output            系统事件发送能力及权限
+[6] virtual mic device         macOS 音频输入和虚拟麦设备
+[7] obs websocket              ws://host:port 可连
+[8] busylight capable          能力探测结果（未知 / 支持 / 不支持）
+[9] single instance lock       锁文件状态
 ```
 
 #### Scenario: 非致命项
@@ -83,6 +83,6 @@
 
 程序 SHALL 在文档中明确运行所需权限，并在缺失时给出可执行命令。
 
-#### Scenario: uinput 权限缺失
-- **WHEN** 当前用户无 `/dev/uinput` 写权限
-- **THEN** `doctor` 输出建议：创建 udev 规则或把用户加入 `input` 组；`hid_send` 动作返回 `> ERR uinput permission denied`
+#### Scenario: 系统权限缺失
+- **WHEN** 采集或键盘事件发送所需的 macOS 系统权限不可用
+- **THEN** `doctor` 指出所需权限和系统设置位置；相应动作报告不可用，不得声称已成功
