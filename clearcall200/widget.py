@@ -5,7 +5,7 @@
 - bar 形态：单行 320×46 工具条。连接点 · 通话缩写 · 4 键胶囊 · 识别结果 · PTT 细条
 - pet 形态：88×88 角色浮层，表情随状态变化
 
-平台说明：macOS 上 Tk 的 topmost 无法覆盖全屏应用（系统限制），不声称可覆盖全屏。
+平台说明：挂件使用普通窗口层级，不强制置顶。
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def ptt_ratio(elapsed_sec: float, max_sec: float) -> float:
     return max(0.0, min(1.0, elapsed_sec / max_sec))
 
 
-# ---------------- 基类：无边框 / 置顶 / 可拖动 ----------------
+# ---------------- 基类：普通窗口 / 可拖动 ----------------
 class _FloatingBase:
     def __init__(self, app, width: int, height: int, master=None):
         self.app = app
@@ -75,21 +75,14 @@ class _FloatingBase:
         self.root = tk.Tk() if master is None else tk.Toplevel(master)
         self.root.title("ClearCall200")
         self.root.configure(bg=BG)
-        # macOS：必须在隐藏状态下设置 overrideredirect 再显示，才能真正去掉标题栏
-        # （对已映射的窗口设置会被系统忽略，实测仍带标题栏）
+        # 使用普通窗口，避免无边框窗口在 macOS 上保持浮动层级。
         self.root.withdraw()
-        self.root.overrideredirect(True)
-        try:
-            self.root.wm_attributes("-topmost", True)
-        except Exception:
-            pass
         try:
             self.root.wm_attributes("-alpha", 0.94)
         except Exception:
             pass
         self._place()
         self.root.deiconify()
-        self.root.overrideredirect(True)   # 显示后再设一次，macOS 才会真正去掉标题栏
 
         self.small = tkfont.Font(family="Menlo", size=10)
         self.tiny = tkfont.Font(family="Menlo", size=9)
@@ -246,6 +239,7 @@ class KeyBarWidget(_FloatingBase):
         # 采集线程 → 解析器（必须在主线程）
         self.app.pump_edges()
         self.app.pump_volume()
+        self.app.pump_v98_log()
         self.app._dispatch_parser_events(self.app.parser.tick(time.monotonic()))
         st = self.app.state
         now = time.monotonic()
@@ -365,6 +359,7 @@ class PetWidget(_FloatingBase):
         # 采集线程 → 解析器（必须在主线程）
         self.app.pump_edges()
         self.app.pump_volume()
+        self.app.pump_v98_log()
         self.app._dispatch_parser_events(self.app.parser.tick(time.monotonic()))
         st = self.app.state
         now = time.monotonic()

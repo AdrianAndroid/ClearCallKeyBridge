@@ -26,7 +26,7 @@ printf 'test trigger=volp:long\nquit\n' | python3 -m clearcall200   # 管道模�
 python3 -m clearcall200 --config config/rules.json --log /tmp/feed.log
 
 python3 -m clearcall200 --ui                   # 主设置窗口 + 常驻工具条（关闭主窗口=保活）
-python3 -m clearcall200 --widget bar            # 常驻置顶小工具条（320×46）
+python3 -m clearcall200 --widget bar            # 常驻小工具条（320×46）
 python3 -m clearcall200 --widget pet            # 桌宠形态（88×88）
 python3 -m clearcall200 --widget-selftest bar   # 挂件自测：约 1s 自动关闭
 

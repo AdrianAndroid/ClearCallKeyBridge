@@ -67,6 +67,16 @@ def describe_action(action: str) -> str:
     return a
 
 
+def device_image(name: str) -> tuple[str | None, int]:
+    """按完整型号匹配图片，未知型号使用通用占位。"""
+    model = " ".join(name.casefold().split())
+    if model == "v98":
+        return "assets/v98-device.png", 4
+    if model == "edifier clearcall 200":
+        return "assets/headset-ui.png", 1
+    return None, 1
+
+
 class Switch(tk.Canvas):
     """macOS 风格开关（自绘，避免 tk.Checkbutton 在 mac 上的怪异样式）。"""
 
@@ -266,6 +276,11 @@ class DesktopClient:
 
         self.device_box = tk.Frame(head, bg=BG)
         self.device_box.pack(side="right", padx=(0, 18))
+        self._devices = bluetooth_devices()
+        self._devices.sort(key=lambda d: (not d.get("connected"),
+                                           device_image(d.get("name", ""))[0] is None,
+                                           d.get("type") != "Headset"))
+        self._selected_device = next((d for d in self._devices if d.get("connected")), None)
         self._build_device_cards()
 
         body = tk.Frame(page, bg=BG)
@@ -286,12 +301,36 @@ class DesktopClient:
     def _build_center_image(self, parent: tk.Frame) -> None:
         holder = tk.Frame(parent, bg=BG)
         holder.pack(fill="both", expand=True)
-        try:
-            self._photo = tk.PhotoImage(file=asset_path("assets/headset-ui.png"))
-            tk.Label(holder, image=self._photo, bg=BG, bd=0).pack(expand=True)
-        except Exception:
-            tk.Label(holder, text="🎧", bg=BG, fg=SUB, font=(FONT, 72)).pack(expand=True)
-        tk.Label(holder, text="按键时对应卡片会高亮", bg=BG, fg=SUB, font=(FONT, 11)).pack(pady=(0, 8))
+        self.image_label = tk.Label(holder, bg=BG, fg=SUB, bd=0)
+        self.image_label.pack(expand=True)
+        self.image_caption = tk.Label(holder, bg=BG, fg=SUB, font=(FONT, 11))
+        self.image_caption.pack(pady=(0, 8))
+        self._show_device_image()
+
+    def _show_device_image(self) -> None:
+        device = self._selected_device or {}
+        name = device.get("name", "")
+        image_file, scale = device_image(name)
+        self._photo = None
+        if image_file:
+            try:
+                self._photo = tk.PhotoImage(file=asset_path(image_file))
+                if scale > 1:
+                    self._photo = self._photo.subsample(scale, scale)
+            except tk.TclError:
+                self._photo = None
+        if self._photo is not None:
+            self.image_label.configure(image=self._photo, text="")
+        else:
+            self.image_label.configure(image="", text="暂无设备图片", font=(FONT, 16))
+        self.image_caption.configure(text=name if name else "未选择已连接设备")
+
+    def _select_device(self, device: dict) -> None:
+        if not device.get("connected"):
+            return
+        self._selected_device = device
+        self._show_device_image()
+        self._build_device_cards()
 
     def _build_key_card(self, parent: tk.Frame, icon: str, title: str, gestures) -> None:
         card = tk.Frame(parent, bg=CARD, highlightbackground=BORDER, highlightthickness=1)
@@ -309,14 +348,14 @@ class DesktopClient:
             self.cells.append(cell)
 
     def _build_device_cards(self) -> None:
-        devices = bluetooth_devices()
-        shown = devices[:2]
+        for widget in self.device_box.winfo_children():
+            widget.destroy()
+        shown = self._devices[:2]
         for dev in shown:
-            self._device_card(self.device_box, dev, highlight=dev.get("name", "").startswith("EDIFIER"))
-        if len(shown) < 2:
-            card = tk.Frame(self.device_box, bg="#F0F0F3", highlightbackground=BORDER, highlightthickness=1)
-            card.pack(side="left", padx=4)
-            tk.Label(card, text="＋ 其他设备", bg="#F0F0F3", fg=SUB, font=(FONT, 12)).pack(padx=18, pady=16)
+            self._device_card(self.device_box, dev, highlight=dev is self._selected_device)
+        if not shown:
+            tk.Label(self.device_box, text="未读取到蓝牙设备", bg=BG, fg=SUB,
+                     font=(FONT, 12)).pack(side="left", padx=8)
 
     def _device_card(self, parent, dev: dict, highlight: bool = False) -> None:
         bg = ACCENT_BG if highlight else CARD
@@ -336,6 +375,12 @@ class DesktopClient:
         tk.Label(info, text="已连接" if ok else "未连接", bg=bg, fg=SUB, font=(FONT, 11)).pack(side="left", padx=4)
         if dev.get("battery"):
             tk.Label(info, text=f"🔋 {dev['battery']}", bg=bg, fg=SUB, font=(FONT, 11)).pack(side="left", padx=8)
+        # 点击设备卡只切换展示，不修改系统蓝牙或规则。
+        def bind_select(widget):
+            widget.bind("<Button-1>", lambda _event: self._select_device(dev))
+            for child in widget.winfo_children():
+                bind_select(child)
+        bind_select(card)
 
     # ---------------- 其他页面 ----------------
     def _page_title(self, page: tk.Frame, text: str, desc: str) -> tk.Frame:
@@ -385,9 +430,8 @@ class DesktopClient:
         card.pack(fill="x", pady=4)
         tk.Label(card, text="辅助功能 / 输入监控", bg=CARD, fg=TEXT,
                  font=(FONT, 13, "bold")).pack(anchor="w", padx=14, pady=(10, 2))
-        tk.Label(card, text="耳机按键被系统投影成媒体键事件，监听/拦截它需要这两项权限。\n"
-                            "已启用拦截：按下耳机按键不会再改系统音量、不会再触发播放暂停。\n"
-                            "勾选运行本程序的终端后重启客户端即可。",
+        tk.Label(card, text="仅允许处理可确认来自 V98 的按键。\n"
+                            "专用监听尚未接入；系统级媒体键和音量监听已关闭。",
                  bg=CARD, fg=SUB, font=(FONT, 12), justify="left").pack(anchor="w", padx=14, pady=(0, 10))
 
         self.perm_input = tk.Label(body, text="", bg=BG, fg=TEXT, font=(FONT, 12), justify="left")
@@ -562,6 +606,7 @@ class DesktopClient:
         """音量键事件单独高频抽取（20ms），不受 80ms 界面心跳影响。"""
         try:
             self.app.pump_volume()
+            self.app.pump_v98_log()
         except Exception:
             pass
         self.root.after(20, self._pump_volume_loop)
@@ -593,9 +638,7 @@ class DesktopClient:
         st = self.app.state
         capture = getattr(self.app, "media_keys_ok", False)
         self.dot.configure(fg=GREEN if capture else GRAY)
-        mode = "拦截中" if getattr(self.app, "intercept_on", False) else ""
-        text = f"按键功能{'已连接' if capture else '未连接（缺辅助功能权限）'}"
-        text += f"（{mode}）" if mode else ""
+        text = "V98 按键监听：已启用" if capture else "V98 按键监听尚未接入（系统级监听已关闭）"
         text += f"  ·  {st.call_label()}"
         if st.is_learn():
             text += "  ·  学习中（只检测）"
@@ -691,10 +734,12 @@ def bluetooth_devices() -> list[dict]:
         indent = len(line) - len(line.lstrip())
         if indent <= 10 and stripped.endswith(":"):
             cur = {"name": stripped[:-1], "connected": section == "connected",
-                   "address": "", "battery": ""}
+                   "address": "", "battery": "", "type": ""}
             devices.append(cur)
         elif cur is not None and stripped.startswith("Address:"):
             cur["address"] = stripped.split(":", 1)[1].strip()
         elif cur is not None and stripped.startswith("Battery Level:"):
             cur["battery"] = stripped.split(":", 1)[1].strip()
+        elif cur is not None and stripped.startswith("Minor Type:"):
+            cur["type"] = stripped.split(":", 1)[1].strip()
     return devices

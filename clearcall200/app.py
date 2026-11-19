@@ -18,12 +18,14 @@ from .rules import TRIGGERS, ActionError, RuleSet
 from .runtime import Runtime
 from .state import State
 from .ui import TerminalUI
+from .v98_log import V98LogWatcher
 
 EXPORT_PATH = Path("feed-export.txt")
 
 
 class App:
-    def __init__(self, config_path: str | Path, log_path: str | None = None):
+    def __init__(self, config_path: str | Path, log_path: str | None = None,
+                 v98_log: bool = False):
         self.config_path = Path(config_path)
         self.rt = Runtime(log_path)
 
@@ -75,6 +77,10 @@ class App:
         self._vol_last_ts = 0.0
         self._edge_q: queue.Queue = queue.Queue()
 
+        # V98 只读日志检测（详见 openspec/changes/2026-11-19-v98-log-detect.md）
+        self.v98_requested = bool(v98_log)
+        self.v98_watcher: V98LogWatcher | None = None
+
         # 挂件回调挂点（None 时完全不影响终端行为）
         self.edge_listener = None    # f(kind, key)：press/release 边沿
         self.trigger_listener = None  # f(trigger)：识别结果
@@ -111,6 +117,7 @@ class App:
         client = DesktopClient(self, widget_mode)
         self.attach_media_keys()
         self.attach_volume_watch()
+        self.attach_v98_log()
         self.rt.install_signals()
         try:
             client.loop()
@@ -128,6 +135,7 @@ class App:
         self.ui.interactive = False
         self.attach_media_keys()
         self.attach_volume_watch()
+        self.attach_v98_log()
         self.rt.install_signals()
         try:
             widget.loop()
@@ -147,12 +155,14 @@ class App:
         reader = _CharReader()
         reader.start()
         self.rt.install_signals()
+        self.attach_v98_log()
         self.ui.render(self.state, self.rules)
         try:
             while not self.quit and not self.rt.stop_requested:
                 tick_events = self.parser.tick(time.monotonic())
                 self._dispatch_parser_events(tick_events)
                 self._housekeeping()
+                self.pump_v98_log()
 
                 if reader.wait(0.05):
                     ch = reader.read()
@@ -379,37 +389,11 @@ class App:
     # ---------------- 事件 ----------------
     # ---------------- macOS 媒体键采集 ----------------
     def attach_media_keys(self) -> bool:
-        """启动媒体键监听；无权限时返回 False（工具条仍可用，只是不点亮）。"""
-        from .mac_input import MediaKeySource
-
-        try:
-            import Quartz
-            self.perm_granted_before = bool(Quartz.CGPreflightListenEventAccess()
-                                            or Quartz.CGPreflightPostEventAccess())
-        except Exception:
-            self.perm_granted_before = False
-
-        def on_edge(kind: str, key: str) -> None:
-            self._edge_q.put((kind, key))
-
-        intercept = bool(self.cfg.get("capture", {}).get("intercept", True))
-        src = MediaKeySource(on_edge, intercept=intercept)
-        self.media_keys_ok = src.start()
-        self.intercept_on = bool(src.intercept)
-        self.media_source = src
-        if self.media_keys_ok:
-            mode = "拦截模式（系统音量/播放不再响应）" if src.intercept else "旁听模式（与系统行为并存）"
-            self.ui.append(f"OK 媒体键监听已启动 · {mode}")
-        else:
-            self.ui.append(f"ERR 媒体键监听未启动：{src.error}")
-            # 首次运行：弹出系统授权框并把本应用登记进「输入监控 / 辅助功能」列表
-            try:
-                import Quartz
-                Quartz.CGRequestListenEventAccess()
-                Quartz.CGRequestPostEventAccess()
-            except Exception:
-                pass
-        return self.media_keys_ok
+        """设备来源无法确认时禁止启用全局媒体键监听。"""
+        self.media_keys_ok = False
+        self.intercept_on = False
+        self.ui.append("WARN V98 专用按键采集尚未接入；系统级监听已关闭")
+        return False
 
     def stop_media_keys(self) -> None:
         if self.media_source:
@@ -418,52 +402,56 @@ class App:
         self.media_keys_ok = False
 
     def attach_volume_watch(self) -> bool:
-        import queue as _q
-        import time as _t
+        """系统音量变化无法可靠归因到 V98，不监听也不回写。"""
+        self.vol_watcher = None
+        return False
 
-        from .vol_watch import VolumeListener, VolumeWatcher, available, get_volume, set_volume
+    # ---------------- V98 只读日志检测 ----------------
+    def attach_v98_log(self) -> str:
+        """按配置启动 V98 日志检测；只读旁听，不进规则匹配。
 
-        if not available():
-            return False
+        状态来源：--v98-log（会话级强制）或 capture.v98_log.enabled；
+        地址取 capture.v98_log.address，缺省回退 device 字段。
+        返回并展示最终状态，启动失败必须如实显示 unavailable。
+        """
+        self.stop_v98_log()
+        section = self.cfg.get("capture", {}).get("v98_log", {}) or {}
+        enabled = self.v98_requested or bool(section.get("enabled", False))
+        if not enabled:
+            self.ui.append("WARN V98 日志检测未启用（--v98-log / capture.v98_log.enabled）")
+            return "disabled"
+        address = str(section.get("address") or self.cfg.get("device") or "").upper()
+        watcher = V98LogWatcher(address)
+        watcher.start()
+        self.v98_watcher = watcher
+        if watcher.status == "running":
+            self.ui.append(f"OK V98 日志检测启动 addr={address}（只读旁听）")
+        elif watcher.status == "starting":
+            self.ui.append(f"OK V98 日志检测启动中 addr={address}")
+        else:
+            self.ui.append(f"ERR V98 log detect unavailable: {watcher.status.split(':', 1)[-1]}")
+        return watcher.status
 
-        intercept = bool(self.cfg.get("capture", {}).get("intercept", True))
-        self._vol_queue = _q.Queue()
-        self._vol_base = get_volume()
-        self._vol_cb_last = 0.0
-        self._vol_intercept = intercept
+    def stop_v98_log(self) -> None:
+        if self.v98_watcher:
+            self.v98_watcher.stop()
+            self.v98_watcher = None
 
-        # 轮询兜底（3ms）
-        self.vol_watcher = VolumeWatcher(intercept=intercept)
-        self.vol_watcher.start(lambda k, ts: self._vol_queue.put((k, ts)))
+    def pump_v98_log(self) -> None:
+        """把日志检测事件刷进事件流（必须在主线程调用）。
 
-        # 主力：CoreAudio 属性变更通知
-        def _on_change(obj, n):
-            now = _t.monotonic()
-            if now - self._vol_cb_last < 0.12:
-                return
-            self._vol_cb_last = now
-            cur = get_volume()
-            key = "unknown"
-            if cur is not None and self._vol_base is not None:
-                delta = cur - self._vol_base
-                if delta >= 0.02:
-                    key = "volp"
-                elif -delta >= 0.02:
-                    key = "volm"
-                if abs(delta) >= 0.02:
-                    if intercept:
-                        set_volume(self._vol_base)
-                    else:
-                        self._vol_base = cur
-            elif cur is not None:
-                self._vol_base = cur
-            self._vol_queue.put((key, now))
-
-        self._vol_listener = VolumeListener(_on_change)
-        ok = self._vol_listener.attach()
-        self.ui.append("OK 音量键监听已启动（系统音量变更通知）" if ok
-                       else "WARN 音量键监听注册失败，退化到轮询")
-        return True
+        只展示原始检测事件，不做方向判定、不触发 trigger / 动作；
+        音量通知的同值重复与交错如实打印。
+        """
+        if not self.v98_watcher:
+            return
+        for ev in self.v98_watcher.drain():
+            if ev[0] == "play":
+                self.ui.append("DETECT v98 play (AVRCP Play)")
+            elif ev[0] == "pause":
+                self.ui.append("DETECT v98 pause (AVRCP Pause)")
+            elif ev[0] == "volume":
+                self.ui.append(f"DETECT v98 volume={ev[1]} (~{ev[2]}%)")
 
     def pump_volume(self) -> None:
         """轮询音量变化 → 识别为 volp/volm 按键（必须在主线程调用）。"""
@@ -549,6 +537,7 @@ class App:
 
     def _cleanup(self) -> None:
         self.stop_media_keys()
+        self.stop_v98_log()
         # 停推流（批 1 无音频，仅复位状态）→ 释放锁
         if self.state.ptt_state:
             self.state.update(ptt_state=0)

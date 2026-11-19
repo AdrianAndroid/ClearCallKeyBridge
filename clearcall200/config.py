@@ -17,7 +17,11 @@ DEFAULT_CONFIG: dict = {
     "learn_timeout_sec": 30,
     "ptt_hold_max_sec": 120,
     "ui": {"timestamp": True, "feed_max_lines": 200, "show_latency_hint": True},
-    "capture": {"intercept": True},   # True=拦截耳机按键系统行为；False=旁听
+    "capture": {
+        "intercept": True,   # True=拦截耳机按键系统行为；False=旁听
+        # V98 只读日志检测通道（openspec/changes/2026-11-19-v98-log-detect.md）
+        "v98_log": {"enabled": False, "address": ""},   # address 缺省回退 device 字段
+    },
     "rules": [
         {"index": 0, "trigger": "mute:click", "action": "obs_toggle_mute", "note": "HFP only in call"},
         {"index": 1, "trigger": "call:click", "action": 'hid_send F13'},

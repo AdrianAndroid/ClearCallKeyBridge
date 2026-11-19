@@ -70,13 +70,17 @@ def main(argv: list[str] | None = None) -> int:
         choices=["bar", "pet"],
         help="构造挂件后约 400ms 自动关闭，用于验证 GUI 能拉起",
     )
+    parser.add_argument(
+        "--v98-log", action="store_true",
+        help="会话级开启 V98 只读日志检测（只展示播放/暂停/音量通知，不执行动作）",
+    )
     args = parser.parse_args(argv)
 
     if args.keyprobe:
-        from .mac_input import probe
-        return probe(args.keyprobe)
+        print("ERR 系统级媒体键探针已停用：无法限定为 V98")
+        return 2
 
-    app = App(args.config, args.log)
+    app = App(args.config, args.log, v98_log=bool(args.v98_log))
     try:
         if args.frame:
             print(app.demo_frame(args.frame))
