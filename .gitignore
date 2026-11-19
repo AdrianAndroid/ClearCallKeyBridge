@@ -1,0 +1,9 @@
+dist/
+build/
+*.spec
+.signing/
+__pycache__/
+*.pyc
+.pytest_cache/
+config/rules.json
+.DS_Store

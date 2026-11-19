@@ -1,0 +1,39 @@
+{
+  "$schema_note": "EdifierClearCall200 默认规则示例。spec: openspec/specs/key-mapping/spec.md",
+  "version": 1,
+  "device": "E8:AA:BB:CC:DD:EE",
+  "timing": {
+    "long_press_ms": 1500,
+    "double_click_ms": 500,
+    "debounce_ms": 50
+  },
+  "learn_timeout_sec": 30,
+  "ptt_hold_max_sec": 120,
+  "ui": {
+    "timestamp": true,
+    "feed_max_lines": 200,
+    "show_latency_hint": true
+  },
+  "rules": [
+    { "index": 0, "trigger": "mute:click", "action": "obs_toggle_mute", "note": "HFP only in call" },
+    { "index": 1, "trigger": "call:click", "action": "hid_send F13" },
+    { "index": 2, "trigger": "call:long", "action": "notify\"长按通话键\"" },
+    { "index": 3, "trigger": "call:double", "action": "notify\"双击通话键\"" },
+    { "index": 4, "trigger": "volp:click", "action": "hid_send F14" },
+    { "index": 5, "trigger": "volp:long", "action": "ptt_hold" },
+    { "index": 6, "trigger": "volm:click", "action": "notify\"音量减\"" }
+  ],
+  "actions": {
+    "ptt": {
+      "source": "default"
+    },
+    "obs": {
+      "host": "127.0.0.1",
+      "port": 4455,
+      "password": ""
+    },
+    "volume_rollback": {
+      "enabled": false
+    }
+  }
+}
