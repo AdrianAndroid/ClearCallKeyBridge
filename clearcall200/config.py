@@ -22,13 +22,11 @@ DEFAULT_CONFIG: dict = {
         # V98 只读日志检测通道（openspec/changes/2026-11-19-v98-log-detect.md）
         "v98_log": {"enabled": False, "address": ""},   # address 缺省回退 device 字段
     },
+    # V98 只有 3 个物理键、只支持单击：界面与默认规则一一对应（见 openspec/changes/2026-11-19-v98-single-click-only.md）
     "rules": [
-        {"index": 0, "trigger": "mute:click", "action": "obs_toggle_mute", "note": "HFP only in call"},
+        # index 对应 rules.py 的 7 条固定触发源顺序（call:click=1 / volp:click=4 / volm:click=6）
         {"index": 1, "trigger": "call:click", "action": 'hid_send F13'},
-        {"index": 2, "trigger": "call:long", "action": 'notify"长按通话键"'},
-        {"index": 3, "trigger": "call:double", "action": 'notify"双击通话键"'},
         {"index": 4, "trigger": "volp:click", "action": 'hid_send F14'},
-        {"index": 5, "trigger": "volp:long", "action": "ptt_hold"},
         {"index": 6, "trigger": "volm:click", "action": 'notify"音量减"'},
     ],
     "actions": {

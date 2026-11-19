@@ -39,12 +39,11 @@ FONT = "Helvetica Neue"
 
 # ---- 物理键 → 可用手势（顺序即界面展示顺序）----
 KEY_LAYOUT = [
-    ("mute", "🎧", "静音键", [("单击", "mute:click")]),
-    ("call", "📞", "通话键", [("单击", "call:click"), ("双击", "call:double"), ("长按", "call:long")]),
-    ("volp", "＋", "音量 +", [("单击", "volp:click"), ("长按", "volp:long")]),
-    ("volm", "－", "音量 −", [("单击", "volm:click")]),
+    ("call", "⏯", "播放 / 暂停键", [("单击", "call:click")]),
+    ("volp", "＋", "音量 + 键", [("单击", "volp:click")]),
+    ("volm", "－", "音量 − 键", [("单击", "volm:click")]),
 ]
-LEFT_KEYS = ("mute", "call")
+LEFT_KEYS = ("call",)
 RIGHT_KEYS = ("volp", "volm")
 
 ACTION_LABEL = {
@@ -430,8 +429,8 @@ class DesktopClient:
         card.pack(fill="x", pady=4)
         tk.Label(card, text="辅助功能 / 输入监控", bg=CARD, fg=TEXT,
                  font=(FONT, 13, "bold")).pack(anchor="w", padx=14, pady=(10, 2))
-        tk.Label(card, text="仅允许处理可确认来自 V98 的按键。\n"
-                            "专用监听尚未接入；系统级媒体键和音量监听已关闭。",
+        tk.Label(card, text="仅处理可确认来自 V98 的按键（只读系统蓝牙日志，按地址隔离）。\n"
+                            "系统级媒体键监听与音量回写已关闭，不拦截其它设备。",
                  bg=CARD, fg=SUB, font=(FONT, 12), justify="left").pack(anchor="w", padx=14, pady=(0, 10))
 
         self.perm_input = tk.Label(body, text="", bg=BG, fg=TEXT, font=(FONT, 12), justify="left")
@@ -477,7 +476,7 @@ class DesktopClient:
         for line in (
             "单体单进程 · 仅标准库 + pyobjc（macOS 媒体键采集）",
             "规范：openspec/specs/*（改行为先改 spec）",
-            "触发源：mute:click / call:click / call:long / call:double / volp:click / volp:long / volm:click",
+            "触发源（本机 V98 三键）：call:click（播放/暂停）· volp:click（音量 +）· volm:click（音量 −）",
             "动作：none / ptt_toggle / ptt_hold / hid_send / obs_toggle_mute / notify",
         ):
             tk.Label(body, text=line, bg=BG, fg=SUB, font=(FONT, 12), justify="left").pack(anchor="w", pady=3)
@@ -552,8 +551,7 @@ class DesktopClient:
         self.refresh()
 
     def _start_demo(self, i: int = 0) -> None:
-        demo = [("call", "call:click"), ("volp", "volp:click"), ("mute", "mute:click"),
-                ("call", "call:click"), ("volm", "volm:click")]
+        demo = [("call", "call:click"), ("volp", "volp:click"), ("volm", "volm:click")]
         key, trigger = demo[i % len(demo)]
         # 走真实链路：队列 → pump_edges → parser → edge/trigger 回调
         self.app._edge_q.put(("press", key))
@@ -636,9 +634,11 @@ class DesktopClient:
 
     def _refresh_status(self) -> None:
         st = self.app.state
-        capture = getattr(self.app, "media_keys_ok", False)
+        # 采集实际由 V98 只读日志通道提供（非系统级媒体键）
+        watcher = getattr(self.app, "v98_watcher", None)
+        capture = bool(watcher) and getattr(watcher, "running", True)
         self.dot.configure(fg=GREEN if capture else GRAY)
-        text = "V98 按键监听：已启用" if capture else "V98 按键监听尚未接入（系统级监听已关闭）"
+        text = "V98 按键监听：已启用（只读日志通道）" if capture else "V98 按键监听：未启用"
         text += f"  ·  {st.call_label()}"
         if st.is_learn():
             text += "  ·  学习中（只检测）"

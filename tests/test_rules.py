@@ -52,9 +52,19 @@ class TestRuleSet(unittest.TestCase):
         self.assertEqual(self.rules.rules[3]["action"], before)
 
     def test_double_bound_toggle(self):
-        self.assertTrue(self.rules.double_bound())
-        self.rules.set_action(3, "none")
+        # double_bound() 语义 = call:double 是否被启用（决定单击是否要等双击窗口）
+        # 默认配置已精简为 V98 三键单击，因此默认必须为 False（单击不等待）
         self.assertFalse(self.rules.double_bound())
+
+        cfg = default_config()
+        cfg["rules"] = [
+            {"index": 1, "trigger": "call:click", "action": "ptt_toggle"},
+            {"index": 3, "trigger": "call:double", "action": "obs_toggle_mute"},
+        ]
+        rules = RuleSet(cfg)
+        self.assertTrue(rules.double_bound())
+        rules.set_action(3, "none")
+        self.assertFalse(rules.double_bound())
 
     def test_action_for_unknown_trigger(self):
         self.assertEqual(self.rules.action_for_trigger("nope"), "none")

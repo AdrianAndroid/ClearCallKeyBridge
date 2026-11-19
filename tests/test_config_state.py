@@ -17,7 +17,7 @@ class TestConfig(unittest.TestCase):
             cfg, status = load_config(path)
             self.assertEqual(status, "generated")
             self.assertTrue(path.exists())
-            self.assertEqual(len(cfg["rules"]), 7)
+            self.assertEqual(len(cfg["rules"]), 3)
 
     def test_load_existing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -34,7 +34,7 @@ class TestConfig(unittest.TestCase):
             cfg, status = load_config(path)
             self.assertEqual(status, "recovered")
             self.assertTrue(path.with_suffix(".json.bak").exists())
-            self.assertEqual(len(cfg["rules"]), 7)
+            self.assertEqual(len(cfg["rules"]), 3)
             json.loads(path.read_text(encoding="utf-8"))  # 回退后的文件必须合法
 
     def test_missing_fields_merged(self):

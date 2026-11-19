@@ -392,7 +392,7 @@ class App:
         """设备来源无法确认时禁止启用全局媒体键监听。"""
         self.media_keys_ok = False
         self.intercept_on = False
-        self.ui.append("WARN V98 专用按键采集尚未接入；系统级监听已关闭")
+        self.ui.append("INFO 全局媒体键监听已关闭（V98 按键由只读日志通道采集）")
         return False
 
     def stop_media_keys(self) -> None:
